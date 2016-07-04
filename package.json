@@ -14,7 +14,7 @@
   },
   "homepage": "",
   "dependencies": {
-    "express": "^4.14.0"
+    "aws-sdk": "^2.4.4"
   },
   "scripts": {
     "start": "node target/main.js"

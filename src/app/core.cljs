@@ -1,21 +1,42 @@
 (ns app.core
-  (:require [cljs.nodejs :as nodejs]))
+  (:require [cljs.core.async :refer [<! close! put! chan >!]]
+            [cljs.nodejs :as node])
+  (:require-macros [cljs.core.async.macros :refer [go]]))
 
-(nodejs/enable-util-print!)
 
-(defonce express (nodejs/require "express"))
-(defonce serve-static (nodejs/require "serve-static"))
-(defonce http (nodejs/require "http"))
+(def ^:private AWS (node/require "aws-sdk"))
+(def ^:private fs (node/require "fs"))
+(def js-links (.parse js/JSON (.readFileSync fs "./urls.json", "utf8")))
+(def links (filter :url (js->clj js-links :keywordize-keys true)))
 
-(def app (express))
+(node/enable-util-print!)
+(def Kinesis (new AWS.Kinesis))
+(def params {:ShardCount 1
+             :StreamName "tweeted-bookmarks"})
+(def link-count (atom 0))
 
-(. app (get "/" (fn [req res] (. res (send "HELLO WORLD")))))
+(defn create-stream []
+  (let [c (chan)]
+    (.createStream Kinesis (clj->js params) #(if %1
+                                          (println "error "%1)
+                                          (go (>! c (js->clj %2 :keywordize-keys true)))))
+    c))
 
-(. app (use (serve-static "resources/public" #js {:index "index.html"})))
+(defn create-message [link]
+  {:Data (.stringify js/JSON (clj->js link))
+   :StreamName "tweeted-bookmarks"
+   :PartitionKey "user"})
 
-(def -main
-  (fn []
-    (doto (.createServer http #(app %1 %2))
-      (.listen 3000))))
+(defn send-message [msg]
+  (.putRecord Kinesis (clj->js msg) #(if %1
+                                       (println %1)
+                                       (println %2))))
+
+(defn -main []
+  (go
+    (doseq [link links]
+      (let [msg (create-message link)]
+        (send-message msg)))))
 
 (set! *main-cli-fn* -main)
+
