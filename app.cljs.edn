@@ -1,0 +1,4 @@
+{:require  [offcourse.core]
+ :init-fns [offcourse.core/init]
+ :compiler-options {:language-in  :ecmascript5
+                    :language-out :ecmascript5}}
